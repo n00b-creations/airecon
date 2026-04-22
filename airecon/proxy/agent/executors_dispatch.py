@@ -450,31 +450,41 @@ class _DispatchExecutorMixin:
         count = self._executed_tool_counts.get(args_key, 0)
         limit = get_config().agent_repeat_tool_call_limit
 
-        if self._is_recon_phase_repeat_blocked(tool_name, arguments, count):
-            binary = self._extract_command_binary(arguments.get("command", ""))
-            return (
-                False,
-                0.0,
-                {
-                    "success": False,
-                    "error": (
-                        f"Duplicate recon execution blocked for '{binary}'. "
-                        "Use previous results and pivot to a new recon vector."
-                    ),
-                },
-                None,
-            )
+        # MCP meta-operations (list_tools, search_tools) are read-only discovery
+        # calls — they must never be blocked by dedup. Only call_tool with the
+        # same tool+args combination is subject to repeat limits.
+        _mcp_meta_action = (
+            tool_name.startswith("mcp_")
+            and str(arguments.get("action", "")).strip().lower()
+            in ("list_tools", "search_tools")
+        )
 
-        if count >= limit:
-            return (
-                False,
-                0.0,
-                {
-                    "success": False,
-                    "error": f"Duplicate tool execution prevented (already ran {count}x).",
-                },
-                None,
-            )
+        if not _mcp_meta_action:
+            if self._is_recon_phase_repeat_blocked(tool_name, arguments, count):
+                binary = self._extract_command_binary(arguments.get("command", ""))
+                return (
+                    False,
+                    0.0,
+                    {
+                        "success": False,
+                        "error": (
+                            f"Duplicate recon execution blocked for '{binary}'. "
+                            "Use previous results and pivot to a new recon vector."
+                        ),
+                    },
+                    None,
+                )
+
+            if count >= limit:
+                return (
+                    False,
+                    0.0,
+                    {
+                        "success": False,
+                        "error": f"Duplicate tool execution prevented (already ran {count}x).",
+                    },
+                    None,
+                )
 
         if tool_name.startswith("mcp_"):
             start_time = time.time()
