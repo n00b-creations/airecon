@@ -110,7 +110,7 @@ See [Changelog](changelog.md) for versioned updates.
 ### 1.  install (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pikpikcu/airecon/refs/heads/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pikpikcu/airecon/refs/heads/main/scripts/install.sh | bash
 ```
 ### 2. Start
 ```bash

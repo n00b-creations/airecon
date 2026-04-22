@@ -102,7 +102,7 @@ AIRecon requires a model with **extended thinking** (`<think>` blocks) and **rel
 ### One-line install (recommended)
 
 ```text
-curl -fsSL https://raw.githubusercontent.com/pikpikcu/airecon/refs/heads/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pikpikcu/airecon/refs/heads/main/scripts/install.sh | bash
 ```
 
 The script auto-detects remote vs local mode, installs Poetry if missing (via official installer — no system package conflicts), builds the wheel, and installs to `~/.local/bin`.
