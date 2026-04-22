@@ -174,9 +174,8 @@ _ask_remove_docker "$_SEARXNG_IMAGE" "searxng/searxng"
 _PLAYWRIGHT_DIR="${HOME}/.cache/ms-playwright"
 if [ -d "$_PLAYWRIGHT_DIR" ]; then
     printf "  ${YELLOW}?${NC}  ${MUTED}Remove Playwright browser cache (~/.cache/ms-playwright)? [y/N]${NC} "
-    if [ "${1:-}" = "-y" ] || [ "${1:-}" = "--yes" ]; then
-        _pw_reply="y"
-        echo "y"
+    if [ "$AUTO_YES" -eq 1 ]; then
+        _pw_reply="y"; echo "y"
     else
         read -r _pw_reply
     fi
@@ -192,9 +191,8 @@ fi
 _AIRECON_DATA="${HOME}/.airecon"
 if [ -d "$_AIRECON_DATA" ]; then
     printf "  ${YELLOW}?${NC}  ${MUTED}Remove airecon data directory (~/.airecon — includes datasets)? [y/N]${NC} "
-    if [ "${1:-}" = "-y" ] || [ "${1:-}" = "--yes" ]; then
-        _data_reply="y"
-        echo "y"
+    if [ "$AUTO_YES" -eq 1 ]; then
+        _data_reply="y"; echo "y"
     else
         read -r _data_reply
     fi
