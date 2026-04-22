@@ -866,6 +866,24 @@ class _CyclePreludeMixin:
             ]
             self.state.conversation.append({"role": "system", "content": explore_ctx})
 
+        dataset_hint = self._build_dataset_hint(current_phase)
+        if dataset_hint:
+            self.state.conversation = [
+                msg
+                for msg in self.state.conversation
+                if not msg.get("content", "").startswith("[SYSTEM: KNOWLEDGE BASE")
+            ]
+            self.state.conversation.append({"role": "system", "content": dataset_hint})
+
+        web_search_hint = self._build_web_search_hint(current_phase)
+        if web_search_hint:
+            self.state.conversation = [
+                msg
+                for msg in self.state.conversation
+                if not msg.get("content", "").startswith("[SYSTEM: WEB SEARCH")
+            ]
+            self.state.conversation.append({"role": "system", "content": web_search_hint})
+
         if self.state.iteration == 1 and not self._ctf_mode:
             self.state.conversation.append(
                 {

@@ -391,17 +391,17 @@
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the web via SearXNG (DuckDuckGo fallback) for payloads, CVEs, bypasses, and testing references.",
+            "description": "Search the web via SearXNG (DuckDuckGo fallback). Supports full Google dork operators when SearXNG is configured: site:, filetype:, inurl:, intitle:, ext:, -inurl:, cache:. Use for: (1) CVE/PoC research — 'CVE-2024-1234 exploit PoC github'; (2) Google dorking for sensitive exposure — 'site:target.com filetype:env', 'site:target.com inurl:admin', 'site:target.com ext:sql', 'intitle:index.of target.com backup'; (3) technology fingerprinting — 'site:target.com powered by X'; (4) credential/config leaks — 'site:target.com ext:yaml password', 'site:target.com filetype:log'. Combine operators for precision: 'site:target.com (filetype:pdf OR filetype:xls) confidential'. DuckDuckGo fallback supports basic operators but not wildcard site:*.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search query string."
+                        "description": "Search query. Supports dork operators: site:, filetype:, inurl:, intitle:, ext:, -inurl:. Examples: 'site:target.com filetype:env', 'inurl:admin site:target.com', 'CVE-2024-1234 PoC exploit'."
                     },
                     "max_results": {
                         "type": "integer",
-                        "description": "Maximum results to return (default: 10, max: 50). Use higher values for thorough dorking."
+                        "description": "Maximum results to return (default: 10, max: 50). Use 20-30 for thorough dorking campaigns."
                     }
                 },
                 "required": [
@@ -1227,6 +1227,31 @@
                 "required": [
                     "query"
                 ]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dataset_search",
+            "description": "Search the local security knowledge base (installed via airecon-dataset). Retrieves relevant Q&A pairs, techniques, payloads, and CVE knowledge from locally indexed HuggingFace datasets. Use when you need reference knowledge about: specific vulnerability classes, exploit techniques, CVE details, CTF techniques, bug bounty methodology, or payload examples. Example: {\"query\": \"SQL injection bypass WAF\", \"limit\": 3} or {\"query\": \"SSRF cloud metadata\", \"category\": \"vulnerability\"}. Returns matching knowledge entries from the local dataset index.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query — use specific technical terms for best results (e.g. 'XSS filter bypass', 'IDOR privilege escalation', 'CVE-2021-44228 log4j')."
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Optional filter by category: 'vulnerability', 'bug-bounty', 'ctf', 'pentest', 'general', 'custom'."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum results to return (default 5, max 20)."
+                    }
+                },
+                "required": ["query"]
             }
         }
     },

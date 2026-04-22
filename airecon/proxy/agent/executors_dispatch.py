@@ -54,6 +54,7 @@ class _DispatchExecutorMixin:
         "search_notes": ("_execute_search_notes_tool", False),
         "read_note": ("_execute_read_note_tool", False),
         "export_notes_wiki": ("_execute_export_notes_wiki_tool", False),
+        "dataset_search": ("_execute_dataset_search_tool", False),
     }
 
     async def _dispatch_tool(

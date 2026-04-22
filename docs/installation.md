@@ -12,7 +12,8 @@
 8. [First Run](#8-first-run)
 9. [Updating AIRecon](#9-updating-airecon)
 10. [Remote Ollama Setup](#10-remote-ollama-setup)
-11. [Troubleshooting](#11-troubleshooting)
+11. [Optional: Install Datasets](#11-optional-install-datasets)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -250,7 +251,52 @@ Make sure port 11434 is open in the server's firewall.
 
 ---
 
-## 11. Troubleshooting
+## 11. Optional: Install Datasets
+
+The [airecon-dataset](https://github.com/pikpikcu/airecon-dataset) package gives the agent access to a local security knowledge base (~1.09M indexed records, 13 datasets) via the `dataset_search` tool. This is optional — AIRecon works without it.
+
+```bash
+git clone https://github.com/pikpikcu/airecon-dataset.git
+cd airecon-dataset
+
+# Install Python dependencies for the installer
+pip install huggingface_hub tqdm pyarrow
+
+# Install all datasets (~2.4 GB download, ~2 GB installed)
+python install.py
+
+# Or install only specific datasets
+python install.py --include nuclei-templates red-team-offensive apt-privesc
+
+# Verify
+python install.py installed
+```
+
+Restart AIRecon after installing — the `dataset_search` tool picks up new databases automatically.
+
+**What gets installed:**
+
+| Dataset | Records | Use case |
+|---------|---------|---------|
+| Pentest Agent (ChatML) | 322,433 | CVE-based exploitation workflows |
+| CTF SaTML 2024 | 190,657 | Real attack/defense CTF data |
+| CTF Instruct | 141,182 | Pwn, web, crypto, forensics |
+| Cybersecurity CVE | 124,732 | CVE analysis and exploitation |
+| SQL Injection Q&A | 50,632 | Conversational SQLi techniques |
+| Red Team Offensive | 78,430 | Lateral movement, privilege escalation |
+| Cybersecurity Fenrir | 83,918 | Attack/defense instruction pairs |
+| Cybersecurity Q&A | 53,199 | General security knowledge |
+| StackExchange RE | 20,641 | Binary analysis, reverse engineering |
+| Nuclei Templates | 23,180 | Nuclei YAML template generation |
+| NVD Security Instructions | 2,063 | Structured CVE analysis |
+| APT Privilege Escalation | 1,000 | Linux priv esc with APT tactics |
+| Bug Bounty & Pentest | 146 | Payloads, bypass methods, methodology |
+
+See [Features: Local Knowledge Base](features.md#local-knowledge-base) for how the agent uses this.
+
+---
+
+## 12. Troubleshooting
 
 ### `airecon: command not found`
 `~/.local/bin` is not in PATH. Follow [Step 5](#5-configure-path).

@@ -612,11 +612,9 @@ class _SupervisionMixin:
             else:
                 skills_to_remove.append((i, 0))
 
-        skills_to_remove.sort(key=lambda x: (x[1], -x[0]))
-
-        for i_tuple in reversed(skills_to_remove):
-            i = i_tuple[0] if isinstance(i_tuple, tuple) else i_tuple
-            self.state.conversation.pop(i)
+        for i in sorted((t[0] for t in skills_to_remove), reverse=True):
+            if i < len(self.state.conversation):
+                self.state.conversation.pop(i)
 
         pruned_count = len(skills_to_remove)
         if pruned_count > 0:

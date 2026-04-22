@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import secrets
 import sys
 import time
@@ -728,3 +729,120 @@ class _UtilsExecutorMixin:
             full_path = self._notes_manager.storage_dir / "wiki.md"
         result = self._notes_manager.export_wiki(full_path)
         return True, time.time() - start_time, result, None
+
+    # FTS5 chars that break MATCH syntax (operators, punctuation)
+    _FTS5_SPECIAL_RE = re.compile(r'["\(\)\*\+\^<>@:!\-,\.\/\\]')
+
+    @staticmethod
+    def _sanitize_fts5(query: str) -> str:
+        """Strip FTS5 operator chars and return space-joined tokens (min len 2)."""
+        clean = _UtilsExecutorMixin._FTS5_SPECIAL_RE.sub(" ", query)
+        tokens = [t for t in clean.split() if len(t) >= 2]
+        return " ".join(tokens)
+
+    async def _execute_dataset_search_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> tuple[bool, float, dict[str, Any], str | None]:
+        import sqlite3
+
+        start_time = time.time()
+        query = str(arguments.get("query", "")).strip()
+        category = str(arguments.get("category", "")).strip() or None
+        limit = min(int(arguments.get("limit", 5)), 20)
+
+        if not query:
+            return False, 0.0, {"success": False, "error": "query is required"}, None
+
+        fts_query = self._sanitize_fts5(query)
+        if not fts_query:
+            return False, 0.0, {"success": False, "error": "Query produced no usable FTS tokens after sanitization"}, None
+
+        datasets_dir = Path.home() / ".airecon" / "datasets"
+        if not datasets_dir.exists():
+            return (
+                False,
+                0.0,
+                {"success": False, "error": "No datasets installed. Run: python install.py in airecon-dataset/"},
+                None,
+            )
+
+        db_files = sorted(datasets_dir.glob("*.db"))
+        if not db_files:
+            return (
+                False,
+                0.0,
+                {"success": False, "error": "No dataset databases found in ~/.airecon/datasets/"},
+                None,
+            )
+
+        _ANSWER_MAX = 500
+        _CONTEXT_MAX = 200
+        results: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        for db_path in db_files:
+            if len(results) >= limit:
+                break
+            con: sqlite3.Connection | None = None
+            try:
+                con = sqlite3.connect(db_path, timeout=5.0)
+                con.row_factory = sqlite3.Row
+                cur = con.cursor()
+
+                if category:
+                    cur.execute(
+                        """
+                        SELECT r.query, r.answer, r.context, r.category, r.source
+                        FROM records_fts f
+                        JOIN records r ON f.rowid = r.id
+                        WHERE records_fts MATCH ? AND r.category = ?
+                        ORDER BY rank
+                        LIMIT ?
+                        """,
+                        (fts_query, category, limit - len(results)),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT r.query, r.answer, r.context, r.category, r.source
+                        FROM records_fts f
+                        JOIN records r ON f.rowid = r.id
+                        WHERE records_fts MATCH ?
+                        ORDER BY rank
+                        LIMIT ?
+                        """,
+                        (fts_query, limit - len(results)),
+                    )
+
+                for row in cur.fetchall():
+                    key = (row["query"] or "").strip().lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    answer = (row["answer"] or "").strip()
+                    truncated = len(answer) > _ANSWER_MAX
+                    results.append({
+                        "query": row["query"],
+                        "answer": answer[:_ANSWER_MAX] + (" …[truncated]" if truncated else ""),
+                        "context": (row["context"] or "").strip()[:_CONTEXT_MAX],
+                        "category": row["category"],
+                        "source": row["source"],
+                    })
+            except Exception as e:
+                logger.warning("dataset_search error on %s: %s", db_path.name, e)
+            finally:
+                if con:
+                    con.close()
+
+        return (
+            True,
+            time.time() - start_time,
+            {
+                "success": True,
+                "query": query,
+                "results": results,
+                "count": len(results),
+                "databases_searched": len(db_files),
+            },
+            None,
+        )

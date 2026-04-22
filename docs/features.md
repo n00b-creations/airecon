@@ -20,6 +20,7 @@
 - [Session Persistence & Resume](#session-persistence--resume)
 - [Anti Context-Loss](#anti-context-loss)
 - [Skills System](#skills-system)
+- [Local Knowledge Base](#local-knowledge-base)
 - [Verified Vulnerability Reporting](#verified-vulnerability-reporting)
 - [Workspace Isolation](#workspace-isolation)
 - [URL Pattern Matching (gf)](#url-pattern-matching-gf)
@@ -584,6 +585,71 @@ Skills are Markdown files in `airecon/proxy/skills/` that give the agent special
 **Keyword mappings:** skill suggestions are driven by pattern matches in the system prompt and session signals.
 
 To add your own skill, see [Adding Custom Skills](development/creating_skills.md).
+
+---
+
+## Local Knowledge Base
+
+AIRecon can query a locally indexed security knowledge base via the `dataset_search` tool. The knowledge base is built from curated HuggingFace datasets and stored as SQLite FTS5 databases at `~/.airecon/datasets/`.
+
+### Setup
+
+```bash
+git clone https://github.com/pikpikcu/airecon-dataset.git
+cd airecon-dataset
+python install.py
+```
+
+Restart AIRecon — the tool is available immediately with no config changes.
+
+### What's Indexed
+
+| Dataset | Records | Coverage |
+|---------|---------|---------|
+| Pentest Agent (CVE workflows) | 322,433 | Enumeration → exploitation chains, MITRE ATT&CK, NVD |
+| CTF SaTML 2024 | 190,657 | Real attack/defense interaction data |
+| CTF Instruct | 141,182 | Pwn, web, crypto, forensics, reverse engineering |
+| Cybersecurity CVE | 124,732 | CVE analysis, CVSS, exploitation context |
+| SQL Injection Q&A | 50,632 | Conversational SQLi — detection, bypass, exploitation |
+| Red Team Offensive | 78,430 | Lateral movement, privilege escalation, evasion |
+| Cybersecurity Fenrir | 83,918 | Attack/defense instruction pairs |
+| Cybersecurity Q&A | 53,199 | Broad security Q&A |
+| StackExchange Reverse Engineering | 20,641 | Binary analysis, disassembly, debugging, malware, CTF RE |
+| Nuclei Templates | 23,180 | Nuclei YAML template generation |
+| NVD Security Instructions | 2,063 | Structured CVE analysis — severity, affected systems, remediation |
+| APT Privilege Escalation | 1,000 | Linux priv esc techniques with APT tactics and commands |
+| Bug Bounty & Pentest | 146 | Rich technique entries with payloads and bypass methods |
+
+**~1,092,213 total records across 13 datasets**
+
+### How the Agent Uses It
+
+The system prompt instructs the agent to query `dataset_search` **before** attempting unknown techniques. This reduces hallucination and surfaces concrete techniques, payloads, and exploitation steps grounded in real data.
+
+```
+# Agent uses it automatically, e.g.:
+dataset_search: {"query": "log4j RCE exploitation chain"}
+dataset_search: {"query": "nuclei template SSRF detection"}
+dataset_search: {"query": "WAF bypass SQL injection", "category": "bug-bounty"}
+```
+
+Results are ranked by FTS5 relevance and capped at 500 chars each to preserve LLM context budget. Special characters (CVE dashes, angle brackets) are sanitized automatically.
+
+### Category Filters
+
+| Category | Content |
+|----------|---------|
+| `vulnerability` | CVE-focused entries |
+| `bug-bounty` | Bug bounty techniques and payloads |
+| `ctf` | CTF challenges and writeups |
+| `pentest` | Red team and offensive techniques |
+| `general` | Broad cybersecurity knowledge |
+
+### Custom Knowledge
+
+Add your own `.jsonl` files to `airecon-dataset/custom/` and re-run `install.py`. Useful for internal wiki content, proprietary technique notes, or target-specific intelligence.
+
+See [airecon-dataset](https://github.com/pikpikcu/airecon-dataset) for the full dataset list, install options, and adding new datasets.
 
 ---
 

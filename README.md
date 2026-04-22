@@ -33,11 +33,13 @@ AIRecon is built 100% for local, private operation.
 | Works offline | **Yes** | No |
 | Caido integration | **Native** | None |
 | Session resume | **Yes** | Varies |
+| Local knowledge base | **~1.09M records** | None |
 
 - **Privacy First** — Target intelligence, tool output, and reports never leave your machine.
 - **Caido Native** — 5 built-in tools: list, replay, automate (`§FUZZ§`), findings, scope.
 - **Full Stack** — Kali sandbox + browser automation + custom fuzzer + Schemathesis API fuzzing + Semgrep SAST.
 - **Skills Knowledge Base** — 57 built-in skill files, 289 keyword → skill auto-mappings. Extended by **[airecon-skills](https://github.com/pikpikcu/airecon-skills)** — a community skill library with 57 additional CLI-based playbooks for CTF, bug bounty, and pentesting.
+- **Local Security Knowledge Base** — Optional **[airecon-dataset](https://github.com/pikpikcu/airecon-dataset)** indexes ~1.09M security records (CVEs, red team techniques, CTF writeups, nuclei templates, bug bounty payloads) into local SQLite FTS5. The LLM calls `dataset_search` autonomously before attempting unfamiliar techniques — grounding its decisions in real indexed data.
 
 ---
 
@@ -261,6 +263,47 @@ Example:
 ```json
 {"name": "mcp_acme", "arguments": {"action": "list_tools"}}
 ```
+
+---
+
+## Knowledge Base (airecon-dataset)
+
+**[airecon-dataset](https://github.com/pikpikcu/airecon-dataset)** is an optional companion that downloads security datasets from HuggingFace and indexes them locally into SQLite FTS5 databases. Once installed, the LLM queries them autonomously via the `dataset_search` tool.
+
+**How it works:** `dataset_search` is a standard agent tool in `tools.json`. The LLM decides when to call it — AIRecon does not auto-trigger it. The system prompt instructs the agent to query the knowledge base before attempting unfamiliar techniques.
+
+```bash
+git clone https://github.com/pikpikcu/airecon-dataset.git
+cd airecon-dataset && python install.py
+```
+
+**Datasets included (~1.09M records total, 100% offline):**
+
+| Dataset | Records | Content |
+|---------|---------|---------|
+| Pentest Agent (ChatML) | 322,433 | CVE-based exploitation workflows (MITRE/NVD/ExploitDB) |
+| CTF SaTML 2024 | 190,657 | Real attack/defense CTF interaction data |
+| CTF Instruct | 141,182 | Pwn, web, crypto, forensics, reverse engineering |
+| Cybersecurity CVE | 124,732 | CVE analysis, CVSS, exploitation context |
+| SQL Injection Q&A | 50,632 | Conversational SQLi — detection, bypass, exploitation |
+| Cybersecurity Fenrir | 83,918 | Attack/defense instruction pairs |
+| Red Team Offensive | 78,430 | Lateral movement, privilege escalation, evasion |
+| Cybersecurity Q&A | 53,199 | Broad security knowledge |
+| StackExchange RE | 20,641 | Binary analysis, disassembly, debugging, malware |
+| Nuclei Templates | 23,180 | Nuclei YAML template generation |
+| NVD Security Instructions | 2,063 | Structured CVE analysis with severity and remediation |
+| APT Privilege Escalation | 1,000 | Linux priv esc techniques with APT tactics |
+| Bug Bounty & Pentest | 146 | Payloads, bypass methods, report templates |
+
+**Example agent queries (called autonomously by the LLM):**
+```
+dataset_search: {"query": "log4j RCE exploitation chain"}
+dataset_search: {"query": "SSRF bypass cloud metadata", "category": "bug-bounty"}
+dataset_search: {"query": "nuclei template XSS detection"}
+dataset_search: {"query": "CVE 2021 44228", "category": "vulnerability"}
+```
+
+Results are capped at 500 chars each. Special chars in CVE IDs (dashes, brackets) are sanitized automatically.
 
 ---
 

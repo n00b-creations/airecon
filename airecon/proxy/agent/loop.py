@@ -183,6 +183,8 @@ class AgentLoop(
         self._stop_requested: bool = False
 
         self._prev_phase: PipelinePhase | None = None
+        self._dataset_hint_injected_phase: str = ""
+        self._web_search_hint_injected: bool = False
 
         self._session: SessionData | None = None
         self._blocked_tools: set[str] = set()

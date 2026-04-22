@@ -322,6 +322,148 @@ class _ExplorationMixin:
 
         return "\n".join(lines)
 
+    # ── Dataset knowledge base phase hint ──────────────────────────────
+
+    def _build_dataset_hint(self, phase: PipelinePhase) -> str:
+        """Return a one-time dataset_search suggestion when phase changes.
+
+        Fires once per phase transition (and at iteration 1). Returns "" when:
+        - No datasets installed at ~/.airecon/datasets/
+        - Already injected for this phase
+        - Phase is REPORT (no lookup needed)
+        """
+        phase_key = phase.value
+
+        # Only inject once per phase
+        if getattr(self, "_dataset_hint_injected_phase", "") == phase_key:
+            return ""
+
+        # Only useful in ANALYSIS and EXPLOIT — RECON dataset results
+        # are too generic (LLM already knows tool usage) and FTS5 keyword
+        # matching returns poor results for broad recon methodology queries.
+        if phase not in (PipelinePhase.ANALYSIS, PipelinePhase.EXPLOIT):
+            return ""
+
+        # Check datasets actually installed
+        datasets_dir = Path.home() / ".airecon" / "datasets"
+        if not list(datasets_dir.glob("*.db")):
+            return ""
+
+        # Build context-aware example queries from session state
+        session_techs: list[str] = []
+        if self._session:  # type: ignore[attr-defined]
+            techs = getattr(self._session, "technologies", {}) or {}
+            session_techs = [t for t in list(techs.keys())[:2] if t]
+
+        tested_vulns = sorted(self._get_tested_vuln_classes())[:3]
+        tech_str = session_techs[0] if session_techs else ""
+
+        if phase == PipelinePhase.ANALYSIS:
+            # Short FTS5-friendly queries — 2-3 tokens for best recall
+            if tech_str and tested_vulns:
+                example = f'{{"query": "{tech_str} {tested_vulns[0]} exploit", "limit": 3}}'
+            elif tech_str:
+                example = f'{{"query": "{tech_str} vulnerability bypass", "limit": 3}}'
+            elif tested_vulns:
+                vuln = tested_vulns[0].replace("_", " ")
+                example = f'{{"query": "{vuln} bypass payload", "category": "pentest", "limit": 3}}'
+            else:
+                example = '{"query": "SSRF bypass payload", "category": "bug-bounty", "limit": 3}'
+            guidance = (
+                "Query the knowledge base for specific vulnerability techniques, "
+                "bypass methods, and payloads for detected technologies and injection points."
+            )
+
+        else:  # EXPLOIT
+            # CVE queries and payload bypasses — highest value use cases
+            if tested_vulns:
+                vuln = tested_vulns[0].replace("_", " ")
+                example = f'{{"query": "{vuln} exploit payload", "category": "pentest", "limit": 3}}'
+            elif tech_str:
+                example = f'{{"query": "{tech_str} CVE exploit", "category": "vulnerability", "limit": 3}}'
+            else:
+                example = '{"query": "WAF bypass exploit payload", "category": "pentest", "limit": 3}'
+            guidance = (
+                "Query the knowledge base for CVE exploitation details, PoC techniques, "
+                "WAF bypass payloads, and nuclei template structure before crafting exploits."
+            )
+
+        # Mark injected for this phase
+        self._dataset_hint_injected_phase = phase_key  # type: ignore[attr-defined]
+
+        return (
+            f"[SYSTEM: KNOWLEDGE BASE — Phase={phase_key}]\n"
+            f"{guidance}\n"
+            f"Example: `dataset_search: {example}`\n"
+            "Keep queries short (2-3 specific tokens) for best FTS5 recall. "
+            "Covers CVEs, exploit techniques, payloads, WAF bypasses, and nuclei templates."
+        )
+
+    # ── Web search RECON phase hint ────────────────────────────────────
+
+    def _build_web_search_hint(self, phase: PipelinePhase) -> str:
+        """Return a one-time web_search suggestion at RECON phase start.
+
+        Fires once per session (RECON entry). Skipped if no technologies
+        are detected yet (too early) or already injected.
+        Includes both CVE research and Google dork examples for sensitive exposure.
+        """
+        if getattr(self, "_web_search_hint_injected", False):
+            return ""
+
+        # Only at RECON phase — CVE research and dorking most useful here
+        if phase != PipelinePhase.RECON:
+            return ""
+
+        # Wait until at least one technology or service is fingerprinted
+        session_techs: dict = {}
+        target_domain: str = ""
+        if self._session:  # type: ignore[attr-defined]
+            session_techs = getattr(self._session, "technologies", {}) or {}
+            raw_target = getattr(self._session, "target", "") or ""
+            # Extract bare domain/host from URL or raw target string
+            _m = re.search(r"https?://([^/:]+)", raw_target)
+            target_domain = _m.group(1) if _m else raw_target.strip().split("/")[0]
+
+        if not session_techs:
+            return ""
+
+        tech_names = [t for t in list(session_techs.keys())[:3] if t]
+        if not tech_names:
+            return ""
+
+        primary = tech_names[0]
+        lines = [
+            "[SYSTEM: WEB SEARCH — Phase=RECON]",
+            f"Detected technologies: {', '.join(tech_names)}.",
+            "Use web_search for both CVE/PoC research AND Google dorking for sensitive exposure.",
+            "",
+            "CVE / exploit research:",
+            f'  web_search: {{"query": "{primary} CVE exploit 2024", "max_results": 10}}',
+        ]
+        if len(tech_names) > 1:
+            lines.append(
+                f'  web_search: {{"query": "{tech_names[1]} vulnerability PoC github", "max_results": 10}}'
+            )
+
+        if target_domain:
+            lines += [
+                "",
+                f"Google dorking against {target_domain} (sensitive exposure):",
+                f'  web_search: {{"query": "site:{target_domain} filetype:env OR filetype:bak OR filetype:sql", "max_results": 20}}',
+                f'  web_search: {{"query": "site:{target_domain} inurl:admin OR inurl:config OR inurl:backup", "max_results": 20}}',
+                f'  web_search: {{"query": "site:{target_domain} ext:log OR ext:yaml OR ext:json password", "max_results": 20}}',
+                f'  web_search: {{"query": "intitle:\\"index of\\" site:{target_domain}", "max_results": 20}}',
+            ]
+
+        lines += [
+            "",
+            "Use specific version numbers when known. Use max_results 20-30 for thorough dork campaigns.",
+        ]
+
+        self._web_search_hint_injected = True  # type: ignore[attr-defined]
+        return "\n".join(lines)
+
     # ── Dynamic vuln class tracking from data sources ──────────────────
 
     def _get_tested_vuln_classes(self) -> set[str]:

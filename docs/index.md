@@ -65,6 +65,11 @@ Built-in skill files are loaded on demand and can be extended with **[airecon-sk
 </div>
 
 <div class="feature-card" markdown>
+### Local Knowledge Base
+Optional **[airecon-dataset](https://github.com/pikpikcu/airecon-dataset)** indexes ~1.09M security records (13 datasets: CVEs, red team techniques, CTF writeups, nuclei templates, SQLi, reverse engineering, priv esc) locally. The agent queries it via `dataset_search` before attempting unfamiliar techniques.
+</div>
+
+<div class="feature-card" markdown>
 ### Caido Integration
 Built-in tools: list, replay, automate (`§FUZZ§`), findings, and scope. Default endpoint: `127.0.0.1:48080`.
 </div>
@@ -163,6 +168,7 @@ Each phase has objectives, recommended tools, and transition criteria. Tool list
 
 - **GitHub**: [github.com/pikpikcu/airecon](https://github.com/pikpikcu/airecon)
 - **Skills Library**: [github.com/pikpikcu/airecon-skills](https://github.com/pikpikcu/airecon-skills)
+- **Dataset Library**: [github.com/pikpikcu/airecon-dataset](https://github.com/pikpikcu/airecon-dataset)
 - **Issues / Bug Reports**: [GitHub Issues](https://github.com/pikpikcu/airecon/issues)
 
 ---

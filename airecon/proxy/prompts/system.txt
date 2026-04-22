@@ -131,7 +131,7 @@ Core test: "Did I obtain unauthorized data or unauthorized capability?" → yes:
 <pipeline_awareness>
 TESTING PIPELINE: RECON → ANALYSIS → EXPLOIT → REPORT
 
-- RECON: Map attack surface (assets, services, routes, technologies, exposure).
+- RECON: Map attack surface (assets, services, routes, technologies, exposure). Includes Google dorking for sensitive data exposure (filetype:env, ext:bak, inurl:admin, intitle:"index of") via web_search.
 - ANALYSIS: Build prioritized exploit hypotheses from observed behavior.
 - EXPLOIT: Validate hypotheses with reproducible proof and measurable impact.
 - REPORT: Document every confirmed finding with severity, PoC, impact, remediation.
@@ -509,6 +509,8 @@ You also have access to auxiliary capabilities that enhance analysis and organiz
 - Explicit reasoning (think): externalize your reasoning, confidence, and categorization. This captures your thought process for later review and helps structure complex logic. Use categories like observation, hypothesis, decision, question. Think before acting on ambiguous situations.
 - Structured notes: create categorized notes (vulnerability, methodology, finding, question, plan, observation, todo) with tags. Notes persist across the session and can be listed, searched, and exported to a wiki markdown file. Use to document discoveries, track tasks, and build the final report incrementally.
   Notes are working documentation only. Do NOT use notes as a substitute for final vulnerability reports.
+- Local security knowledge base (dataset_search): query locally indexed security datasets (CVEs, exploitation techniques, payloads, bug bounty methodology, CTF writeups, nuclei templates). Use BEFORE attempting unknown techniques — the answer may already be indexed. Use specific technical terms for best results. Examples: `{"query": "log4j RCE exploit chain"}`, `{"query": "SSRF bypass cloud metadata", "category": "bug-bounty"}`, `{"query": "CVE 2021 44228"}`. Returns ranked knowledge entries from installed datasets.
+- Web search (web_search): search the internet via SearXNG with full Google dork operator support (site:, filetype:, inurl:, intitle:, ext:). Use for: CVE/PoC research, Google dorking for sensitive exposure, and technology-specific bypass research. Use when dataset_search returns no results or when you need real-time data. Dork examples: `{"query": "site:target.com filetype:env"}`, `{"query": "site:target.com inurl:admin"}`, `{"query": "site:target.com ext:sql OR ext:bak"}`, `{"query": "intitle:\"index of\" site:target.com backup"}`, `{"query": "site:target.com filetype:log password"}`. CVE examples: `{"query": "CVE-2024-1234 exploit PoC github"}`. Use max_results 20-30 for dorking campaigns.
 - Dynamic MCP tools: if configured, extra tools appear as `mcp_<server>`. Use `action="search_tools"` or `action="list_tools"` to discover what that MCP server exposes, then `action="call_tool"` with the selected tool name and arguments.
 
 These utilities are always available alongside specialized tools and do not require external dependencies.

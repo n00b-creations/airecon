@@ -36,6 +36,13 @@ Complete reference for all tools available to the AIRecon agent.
    - [http_observe](#61-http_observe)
    - [record_hypothesis](#62-record_hypothesis)
 7. [Docker Sandbox Tools](#7-docker-sandbox-tools)
+8. [Utility & Knowledge Tools](#8-utility--knowledge-tools)
+   - [think](#81-think)
+   - [python_session](#82-python_session)
+   - [edit_file](#83-edit_file)
+   - [load_skill](#84-load_skill)
+   - [create_note / list_notes / search_notes / read_note / export_notes_wiki](#85-notes-tools)
+   - [dataset_search](#86-dataset_search)
 
 ---
 
@@ -936,6 +943,169 @@ All tools in this section are called via `execute(command="...")`. The sandbox r
 
 ---
 
+## 8. Utility & Knowledge Tools
+
+These tools are always available alongside specialized tools and require no external services.
+
+---
+
+### 8.1 `think`
+
+Externalize the agent's reasoning before acting. Outputs a structured thought to the session without executing any tool.
+
+**Schema:**
+
+```json
+{
+  "name": "think",
+  "parameters": {
+    "thought": "string — The reasoning, hypothesis, or decision to record",
+    "category": "string — observation | hypothesis | decision | question | plan",
+    "confidence": "number — 0.0–1.0 confidence level"
+  },
+  "required": ["thought"]
+}
+```
+
+Use before acting on ambiguous situations, when evaluating conflicting signals, or when planning a multi-step attack chain.
+
+---
+
+### 8.2 `python_session`
+
+Persistent Python interpreter. State is maintained across calls within the same `session_id`. Pre-imports: `os`, `json`, `re`, `base64`, `urllib.parse`, `requests` (if available).
+
+**Schema:**
+
+```json
+{
+  "name": "python_session",
+  "parameters": {
+    "code": "string — Python code to execute",
+    "session_id": "string — Session namespace (default: 'default')"
+  },
+  "required": ["code"]
+}
+```
+
+Use cases: complex payload encoding/decoding, statistical analysis of tool output, hash computation, automated pattern matching across large result sets, generating wordlists programmatically.
+
+---
+
+### 8.3 `edit_file`
+
+Atomic in-place string replacement in workspace files. Specify the exact old string to replace and the new string. Fails if `old_str` is not found — prevents silent overwrites.
+
+**Schema:**
+
+```json
+{
+  "name": "edit_file",
+  "parameters": {
+    "path": "string — File path (relative to workspace root)",
+    "old_str": "string — Exact text to find and replace",
+    "new_str": "string — Replacement text"
+  },
+  "required": ["path", "old_str", "new_str"]
+}
+```
+
+Use for patching exploit scripts, updating config files, or modifying template content without rewriting the entire file.
+
+---
+
+### 8.4 `load_skill`
+
+Explicitly load a skill file into the agent's context. Normally skills are auto-loaded based on keyword detection, but this tool forces a specific skill to load immediately.
+
+**Schema:**
+
+```json
+{
+  "name": "load_skill",
+  "parameters": {
+    "skill_path": "string — Relative path to skill file from skills root"
+  },
+  "required": ["skill_path"]
+}
+```
+
+---
+
+### 8.5 Notes Tools
+
+Five tools for structured session notes. Notes persist across the session and can be exported to a Markdown wiki.
+
+| Tool | Purpose |
+|------|---------|
+| `create_note` | Create a categorized note with tags |
+| `list_notes` | List all notes, optionally filtered by category |
+| `search_notes` | Full-text search across note content |
+| `read_note` | Read a specific note by ID |
+| `export_notes_wiki` | Export all notes to a single Markdown wiki file |
+
+**`create_note` schema:**
+
+```json
+{
+  "name": "create_note",
+  "parameters": {
+    "title": "string — Note title",
+    "content": "string — Note body",
+    "category": "string — vulnerability | methodology | finding | question | plan | observation | todo",
+    "tags": "array of strings — optional tags"
+  },
+  "required": ["title", "content", "category"]
+}
+```
+
+Notes are stored at `workspace/<target>/notes/`. They are working documentation only — use `create_vulnerability_report` for final vulnerability reports.
+
+---
+
+### 8.6 `dataset_search`
+
+Query the local security knowledge base built from [airecon-dataset](https://github.com/pikpikcu/airecon-dataset). Searches across all installed SQLite FTS5 databases at `~/.airecon/datasets/` and returns ranked knowledge entries.
+
+**Schema:**
+
+```json
+{
+  "name": "dataset_search",
+  "parameters": {
+    "query": "string — Search terms (technical terms work best)",
+    "category": "string — vulnerability | bug-bounty | ctf | pentest | general",
+    "limit": "integer — Max results (default 5, max 20)"
+  },
+  "required": ["query"]
+}
+```
+
+**Examples:**
+
+```json
+{"query": "log4j RCE exploitation chain", "limit": 3}
+{"query": "SSRF bypass cloud metadata", "category": "bug-bounty"}
+{"query": "nuclei template XSS detection"}
+{"query": "CVE 2021 44228", "category": "vulnerability"}
+{"query": "lateral movement pass the hash", "category": "pentest"}
+```
+
+**FTS5 query notes:**
+- Dashes in CVE IDs (`CVE-2021-44228`) are automatically stripped → `CVE 2021 44228`
+- Special characters (`<`, `>`, `(`, `)`) are stripped automatically
+- Multi-word queries are matched as individual tokens (OR semantics)
+
+**When to use:**
+- Before attempting an unfamiliar technique — check if it's in the KB first
+- Looking up CVE exploitation steps
+- Finding payload examples for specific vulnerability classes
+- Generating nuclei template YAML structure
+
+**Setup:** requires [airecon-dataset](https://github.com/pikpikcu/airecon-dataset) to be installed. Returns an error if no databases are found at `~/.airecon/datasets/`.
+
+---
+
 ## Tool Summary
 
 | Tool | Category | Source |
@@ -959,5 +1129,15 @@ All tools in this section are called via `execute(command="...")`. The sandbox r
 | `run_parallel_agents` | Multi-Agent | `agent_graph.py` |
 | `http_observe` | Observer | Custom |
 | `record_hypothesis` | Observer | Custom |
+| `think` | Utility | `executors_utils.py` |
+| `python_session` | Utility | `executors_utils.py` |
+| `edit_file` | Utility | `executors_utils.py` |
+| `load_skill` | Utility | `system.py` |
+| `create_note` | Notes | `executors_utils.py` |
+| `list_notes` | Notes | `executors_utils.py` |
+| `search_notes` | Notes | `executors_utils.py` |
+| `read_note` | Notes | `executors_utils.py` |
+| `export_notes_wiki` | Notes | `executors_utils.py` |
+| `dataset_search` | Knowledge | `executors_utils.py` |
 
-**Total: 24 native/specialist tools + 60+ Docker sandbox CLI tools**
+**Total: 35 agent tools + 60+ Docker sandbox CLI tools**

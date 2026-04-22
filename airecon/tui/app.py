@@ -2047,7 +2047,6 @@ class AIReconApp(App):
                     chat.add_error_message("Failed to fetch skills.")
             except Exception as e:
                 chat.add_error_message(f"Error: {e}")
-            self._processing = False
 
         elif cmd.startswith("/shell"):
             shell_cmd = cmd[len("/shell") :].strip()
@@ -2057,7 +2056,6 @@ class AIReconApp(App):
                     "Runs command inside AIRecon Kali Docker sandbox, not host shell.\n"
                     "Blocked interactive multiplexers: tmux, screen, byobu, zellij, abduco, dtach."
                 )
-                self._processing = False
                 return
             try:
                 chat.add_system_message(f"$ {shell_cmd}")
@@ -2104,7 +2102,6 @@ class AIReconApp(App):
                     chat.add_assistant_message("\n".join(body_lines), markup=False)
             except Exception as e:
                 chat.add_error_message(f"Shell request failed: {e}")
-            self._processing = False
             return
 
         elif cmd.startswith("/mcp"):
@@ -2121,7 +2118,6 @@ class AIReconApp(App):
                     "- /mcp enable <name>\n"
                     "- /mcp disable <name>"
                 )
-                self._processing = False
                 return
 
             sub = parts[1] if len(parts) >= 2 else "help"
@@ -2167,7 +2163,6 @@ class AIReconApp(App):
                             )
                     except Exception as e:
                         chat.add_error_message(f"MCP list {target_name} failed: {e}")
-                    self._processing = False
                     return
 
                 try:
@@ -2247,7 +2242,6 @@ class AIReconApp(App):
                     chat.add_error_message(
                         f"MCP list request failed or timed out. Details: {e}"
                     )
-                self._processing = False
                 return
 
             if sub == "add" and len(parts) >= 3:
@@ -2280,7 +2274,6 @@ class AIReconApp(App):
                         )
                 except Exception as e:
                     chat.add_error_message(f"Error MCP add: {e}")
-                self._processing = False
                 return
 
             if sub in {"enable", "disable"} and len(parts) >= 3:
@@ -2298,7 +2291,6 @@ class AIReconApp(App):
                         )
                 except Exception as e:
                     chat.add_error_message(f"MCP {sub} failed: {e}")
-                self._processing = False
                 return
 
             chat.add_error_message(
@@ -2309,7 +2301,6 @@ class AIReconApp(App):
                 "- /mcp enable <name>\n"
                 "- /mcp disable <name>"
             )
-            self._processing = False
 
         elif cmd == "/tools":
             try:
@@ -2339,7 +2330,6 @@ class AIReconApp(App):
                     chat.add_error_message("Failed to fetch tools")
             except Exception as e:
                 chat.add_error_message(f"Error: {e}")
-            self._processing = False
 
         elif cmd == "/info":
             info_text = """## ℹ️ AIRecon Information
@@ -2366,7 +2356,6 @@ class AIReconApp(App):
 - You can ask the AI to run scans, search the web, or browse pages.
 - Click a file in the workspace panel to load it as context for your next prompt."""
             chat.add_assistant_message(info_text)
-            self._processing = False
 
         elif cmd == "/reset":
             await self.action_reset()
