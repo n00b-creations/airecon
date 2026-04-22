@@ -346,7 +346,11 @@ class _ExplorationMixin:
 
         # Check datasets actually installed
         datasets_dir = Path.home() / ".airecon" / "datasets"
-        if not list(datasets_dir.glob("*.db")):
+        try:
+            has_db = any(datasets_dir.glob("*.db"))
+        except Exception:
+            has_db = False
+        if not has_db:
             return ""
 
         # Build context-aware example queries from session state

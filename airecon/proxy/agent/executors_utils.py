@@ -748,7 +748,10 @@ class _UtilsExecutorMixin:
         start_time = time.time()
         query = str(arguments.get("query", "")).strip()
         category = str(arguments.get("category", "")).strip() or None
-        limit = min(int(arguments.get("limit", 5)), 20)
+        try:
+            limit = min(int(arguments.get("limit", 5)), 20)
+        except (TypeError, ValueError):
+            limit = 5
 
         if not query:
             return False, 0.0, {"success": False, "error": "query is required"}, None
@@ -833,6 +836,27 @@ class _UtilsExecutorMixin:
             finally:
                 if con:
                     con.close()
+
+        if not results:
+            cat_hint = f" in category '{category}'" if category else ""
+            return (
+                True,
+                time.time() - start_time,
+                {
+                    "success": True,
+                    "query": query,
+                    "results": [],
+                    "count": 0,
+                    "databases_searched": len(db_files),
+                    "note": (
+                        f"No matches found for '{fts_query}'{cat_hint} across "
+                        f"{len(db_files)} database(s). "
+                        "Try: shorter query (2-3 keywords), drop special chars, "
+                        "or use web_search for real-time results."
+                    ),
+                },
+                None,
+            )
 
         return (
             True,
