@@ -324,23 +324,35 @@ class _ExplorationMixin:
 
     # ── Dataset knowledge base phase hint ──────────────────────────────
 
+    # Re-inject the dataset hint every N iterations if the LLM has not called
+    # dataset_search recently.  A single injection per phase is not enough —
+    # small models routinely skip a hint that appears only once.
+    _DATASET_HINT_REPEAT_EVERY: int = 4
+
+    def _dataset_search_called_recently(self, window: int = 10) -> bool:
+        """Return True if dataset_search appears in the last `window` tool results."""
+        seen = 0
+        for msg in reversed(self.state.conversation):  # type: ignore[attr-defined]
+            role = msg.get("role", "")
+            if role == "tool":
+                if msg.get("name") == "dataset_search":
+                    return True
+                seen += 1
+                if seen >= window:
+                    break
+        return False
+
     def _build_dataset_hint(self, phase: PipelinePhase) -> str:
-        """Return a one-time dataset_search suggestion when phase changes.
+        """Return a dataset_search reminder when the LLM has not used it recently.
 
-        Fires once per phase transition (and at iteration 1). Returns "" when:
+        Fires on every phase transition AND every _DATASET_HINT_REPEAT_EVERY
+        iterations while dataset_search has not been called in the last 10 tool
+        results.  Silenced when:
         - No datasets installed at ~/.airecon/datasets/
-        - Already injected for this phase
-        - Phase is REPORT (no lookup needed)
+        - Phase is RECON or REPORT
+        - dataset_search was already called recently
         """
-        phase_key = phase.value
-
-        # Only inject once per phase
-        if getattr(self, "_dataset_hint_injected_phase", "") == phase_key:
-            return ""
-
-        # Only useful in ANALYSIS and EXPLOIT — RECON dataset results
-        # are too generic (LLM already knows tool usage) and FTS5 keyword
-        # matching returns poor results for broad recon methodology queries.
+        # Only useful in ANALYSIS and EXPLOIT
         if phase not in (PipelinePhase.ANALYSIS, PipelinePhase.EXPLOIT):
             return ""
 
@@ -353,7 +365,20 @@ class _ExplorationMixin:
         if not has_db:
             return ""
 
-        # Build context-aware example queries from session state
+        phase_key = phase.value
+        current_iter: int = getattr(self.state, "iteration", 1)  # type: ignore[attr-defined]
+        last_hint_iter: int = getattr(self, "_dataset_last_hint_iter", -self._DATASET_HINT_REPEAT_EVERY)
+        is_new_phase = getattr(self, "_dataset_hint_injected_phase", "") != phase_key
+
+        # Suppress if: not a new phase AND not enough iterations since last hint
+        if not is_new_phase and (current_iter - last_hint_iter) < self._DATASET_HINT_REPEAT_EVERY:
+            return ""
+
+        # Suppress if the LLM already called dataset_search recently
+        if self._dataset_search_called_recently():
+            return ""
+
+        # ── Build context-aware example queries ───────────────────────────
         session_techs: list[str] = []
         if self._session:  # type: ignore[attr-defined]
             techs = getattr(self._session, "technologies", {}) or {}
@@ -363,7 +388,6 @@ class _ExplorationMixin:
         tech_str = session_techs[0] if session_techs else ""
 
         if phase == PipelinePhase.ANALYSIS:
-            # Short FTS5-friendly queries — 2-3 tokens for best recall
             if tech_str and tested_vulns:
                 example = f'{{"query": "{tech_str} {tested_vulns[0]} exploit", "limit": 3}}'
             elif tech_str:
@@ -374,12 +398,10 @@ class _ExplorationMixin:
             else:
                 example = '{"query": "SSRF bypass payload", "category": "bug-bounty", "limit": 3}'
             guidance = (
-                "Query the knowledge base for specific vulnerability techniques, "
-                "bypass methods, and payloads for detected technologies and injection points."
+                "REQUIRED: call dataset_search NOW to retrieve vulnerability techniques, "
+                "bypass methods, and payloads for detected technologies before continuing analysis."
             )
-
         else:  # EXPLOIT
-            # CVE queries and payload bypasses — highest value use cases
             if tested_vulns:
                 vuln = tested_vulns[0].replace("_", " ")
                 example = f'{{"query": "{vuln} exploit payload", "category": "pentest", "limit": 3}}'
@@ -388,19 +410,20 @@ class _ExplorationMixin:
             else:
                 example = '{"query": "WAF bypass exploit payload", "category": "pentest", "limit": 3}'
             guidance = (
-                "Query the knowledge base for CVE exploitation details, PoC techniques, "
-                "WAF bypass payloads, and nuclei template structure before crafting exploits."
+                "REQUIRED: call dataset_search NOW for CVE exploitation details, PoC techniques, "
+                "and WAF bypass payloads before crafting exploits."
             )
 
-        # Mark injected for this phase
+        # Update tracking state
         self._dataset_hint_injected_phase = phase_key  # type: ignore[attr-defined]
+        self._dataset_last_hint_iter = current_iter  # type: ignore[attr-defined]
 
         return (
-            f"[SYSTEM: KNOWLEDGE BASE — Phase={phase_key}]\n"
+            f"[SYSTEM: KNOWLEDGE BASE — Phase={phase_key} iter={current_iter}]\n"
             f"{guidance}\n"
-            f"Example: `dataset_search: {example}`\n"
+            f"Example query: {example}\n"
             "Keep queries short (2-3 specific tokens) for best FTS5 recall. "
-            "Covers CVEs, exploit techniques, payloads, WAF bypasses, and nuclei templates."
+            "Covers CVEs, exploit techniques, payloads, WAF bypasses, nuclei templates."
         )
 
     # ── Web search RECON phase hint ────────────────────────────────────
