@@ -166,14 +166,25 @@ class TestEnforceCharBudget:
             )
         msgs.append({"role": "tool", "name": "execute", "content": tool_result})
 
+        original_total_chars = sum(
+            len(str(m.get("content", ""))) for m in msgs
+        )
         loop = self._build_loop_with_conversation(msgs)
 
         # Set tools_ollama = [] so tools overhead = 0
         loop._tools_ollama = []
         asyncio.run(loop._enforce_char_budget(num_ctx=num_ctx, num_predict=1_000))
 
-        # Conversation should have been truncated (budget was exceeded)
-        assert len(loop.state.conversation) < len(msgs)
+        # Budget enforcement must reduce total chars (compression/truncation ran).
+        # Message count may stay equal if a separator is inserted for each dropped
+        # message, so we assert on chars not count.
+        after_total_chars = sum(
+            len(str(m.get("content", ""))) for m in loop.state.conversation
+        )
+        assert after_total_chars < original_total_chars, (
+            f"Expected total chars to decrease after budget enforcement, "
+            f"but got {after_total_chars} >= {original_total_chars}"
+        )
 
 
 # ── 1b. watchdog_forced_calls resets after successful tool calls ─────

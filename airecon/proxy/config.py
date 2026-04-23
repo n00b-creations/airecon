@@ -199,16 +199,16 @@ _CONFIG_SCHEMA: dict[str, tuple[Any, str]] = {
         "Compress at X% of max messages. 0.7 = compress at 70% (more aggressive for 12GB VRAM). 0.8 for larger VRAM.",
     ),
     "agent_uncompressed_keep_count": (
-        10,
-        "Keep last N messages uncompressed. 10 for 12GB VRAM (reduced from 20). 20 for larger VRAM.",
+        20,
+        "Keep last N messages uncompressed. 20 = enough history for the LLM to reason across recent context.",
     ),
     "agent_llm_compression_num_ctx": (
-        4096,
-        "Context window for LLM compression. 4096 = 4K (reduced from 8K for 12GB VRAM stability).",
+        8192,
+        "Context window for LLM compression. 8192 = 8K — enough to read old messages and produce a rich summary.",
     ),
     "agent_llm_compression_num_predict": (
-        512,
-        "Output tokens for compression. 512 = more concise summaries (reduced from 1024 for stability).",
+        1536,
+        "Output tokens for compression summary. 1536 = rich enough to capture multi-finding sessions without losing data.",
     ),
     "agent_context_reset_cooldown_seconds": (
         45,

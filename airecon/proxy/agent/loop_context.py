@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 from ..config import get_config
 from ..data_loader import severity_to_int
-from .models import AgentState, _get_model_limits
+from .models import AgentState, _get_context_limits, _get_model_limits
 from .session import get_untested_injection_points
 
 logger = logging.getLogger("airecon.agent")
@@ -16,7 +16,7 @@ class _ContextMixin:
     @property
     def _MAX_TOOL_RESULT_CHARS(self) -> int:
         limits = _get_model_limits()
-        return min(3_000, limits.get("max_tool_result_chars", 50000))
+        return min(12_000, limits.get("max_tool_result_chars", 50000))
 
     def _inject_exploit_vuln_context(self) -> None:
         if not self._session:
@@ -284,10 +284,10 @@ class _ContextMixin:
             return 0
 
         non_system = [(i, m) for i, m in enumerate(msgs) if m.get("role") != "system"]
-        if len(non_system) <= 5:
+        if len(non_system) <= 12:
             return 0
 
-        keep_from_idx = non_system[-5][0] if len(non_system) > 5 else 0
+        keep_from_idx = non_system[-12][0] if len(non_system) > 12 else 0
 
         dropped = 0
         chars_freed = 0
@@ -328,7 +328,11 @@ class _ContextMixin:
         if self._recovery_force_tool_calls > 0:
             return ""
 
-        _PER_MSG_CAP = 350
+        _ctx_limits = _get_context_limits()
+        _compression_num_ctx = _ctx_limits.get("llm_compression_num_ctx", 8192)
+        _compression_num_predict = _ctx_limits.get("llm_compression_num_predict", 1536)
+
+        _PER_MSG_CAP = 700
         chunks: list[str] = []
         for msg in messages_to_compress:
             role = msg.get("role", "?")
@@ -349,26 +353,26 @@ class _ContextMixin:
                 "Update the existing summary with new information from the messages below.\n"
                 "PRESERVE everything still relevant from the previous summary.\n"
                 "ADD new findings, progress, and decisions from the new messages.\n"
-                "Always keep: flags, CVEs, credentials, confirmed vulnerabilities, endpoints."
+                "Always keep: flags, CVEs, credentials, confirmed vulnerabilities, endpoints, injection points, open ports."
             )
             user_content = (
                 f"## Previous Summary (PRESERVE relevant parts):\n{prior}\n\n"
                 f"## New Messages to Integrate:\n{messages_text}\n\n"
                 "Output an updated structured summary:\n"
                 "## Goal\n## Progress\n### Done\n### In Progress\n"
-                "## Key Findings\n## Key Decisions\n## Next Steps"
+                "## Key Findings\n## Injection Points\n## Key Decisions\n## Next Steps"
             )
         else:
             system_content = (
                 "You are a context compression assistant for a security assessment agent.\n"
                 "Summarize the conversation messages below into a structured handoff.\n"
-                "Keep ALL security findings: flags, CVEs, credentials, endpoints, vulnerabilities."
+                "Keep ALL security findings: flags, CVEs, credentials, endpoints, vulnerabilities, injection points, open ports."
             )
             user_content = (
                 f"## Messages to Summarize:\n{messages_text}\n\n"
                 "Output a structured summary:\n"
                 "## Goal\n## Progress\n### Done\n### In Progress\n"
-                "## Key Findings\n## Key Decisions\n## Next Steps"
+                "## Key Findings\n## Injection Points\n## Key Decisions\n## Next Steps"
             )
 
         try:
@@ -377,7 +381,11 @@ class _ContextMixin:
                     {"role": "system", "content": system_content},
                     {"role": "user", "content": user_content},
                 ],
-                options={"num_predict": 2048, "temperature": 0.1},
+                options={
+                    "num_ctx": _compression_num_ctx,
+                    "num_predict": _compression_num_predict,
+                    "temperature": 0.1,
+                },
             )
             return summary.strip()
         except Exception as exc:
@@ -402,7 +410,7 @@ class _ContextMixin:
         _tools_count = len(self._tools_ollama) if self._tools_ollama is not None else 20
         _tools_overhead = _tools_count * 500
         effective_input_ctx = max(1024, num_ctx - effective_predict - _tools_overhead)
-        budget = int(effective_input_ctx * 0.35)
+        budget = int(effective_input_ctx * 0.55)
         total = sum(
             len(str(m.get("content") or ""))
             + len(str(m.get("tool_calls") or ""))
@@ -520,7 +528,7 @@ class _ContextMixin:
             else:
                 _non_first_user.append(m)
 
-        _keep_recent_non_sys = 6
+        _keep_recent_non_sys = 14
         _drop_count = max(0, len(_non_first_user) - _keep_recent_non_sys)
 
         if _drop_count >= 2:
@@ -803,7 +811,7 @@ class _ContextMixin:
         compression_summary = str(getattr(self, "_compression_summary", "") or "").strip()
         if compression_summary:
             parts.append("ITERATIVE MEMORY HANDOFF:")
-            parts.append(f"  {compression_summary[:700]}")
+            parts.append(f"  {compression_summary[:1800]}")
             added_any = True
 
         recent_exec = self._build_recent_execution_memory(last_n=6)
@@ -878,17 +886,33 @@ class _ContextMixin:
                 for e in self.state.evidence_log
                 if severity_to_int(e.get("severity", 1)) >= 4
                 and float(e.get("confidence", 0.0)) >= 0.75
-            ][:5]
+            ][:15]
             if high_ev:
                 parts.append("HIGH-VALUE EVIDENCE (CRITICAL - DO NOT COMPRESS):")
                 for ev in high_ev:
-                    summary = ev.get("summary", ev.get("finding", ""))[:90]
+                    summary = ev.get("summary", ev.get("finding", ""))[:120]
                     source = ev.get("source_tool", "tool")
                     severity = ev.get("severity", 1)
                     confidence = ev.get("confidence", 0.0)
                     parts.append(
                         f"  [{source}][SEV={severity}][{int(confidence * 100)}%] {summary}"
                     )
+                added_any = True
+
+            medium_ev = [
+                e
+                for e in self.state.evidence_log
+                if severity_to_int(e.get("severity", 1)) >= 3
+                and float(e.get("confidence", 0.0)) >= 0.55
+                and e not in high_ev
+            ][:10]
+            if medium_ev:
+                parts.append("MEDIUM-VALUE EVIDENCE:")
+                for ev in medium_ev:
+                    summary = ev.get("summary", ev.get("finding", ""))[:100]
+                    source = ev.get("source_tool", "tool")
+                    confidence = ev.get("confidence", 0.0)
+                    parts.append(f"  [{source}][{int(confidence * 100)}%] {summary}")
                 added_any = True
 
         if self._session and self._session.injection_points:
@@ -1006,7 +1030,7 @@ class _ContextMixin:
 
     def _compress_old_tool_outputs(self, *, aggressive: bool = False) -> None:
         non_system = [m for m in self.state.conversation if m.get("role") != "system"]
-        keep_window = 4 if aggressive else 8
+        keep_window = 8 if aggressive else 14
         if len(non_system) <= keep_window:
             return
 
