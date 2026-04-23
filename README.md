@@ -95,6 +95,57 @@ AIRecon requires a model with **extended thinking** (`<think>` blocks) and **rel
 
 ---
 
+## Running Ollama on Google Colab (Limited Hardware)
+
+If you don't have a GPU or your local VRAM is below the minimum, you can run Ollama on a **free Google Colab T4 GPU** and connect AIRecon to it via a public tunnel.
+
+> **Open the notebook:**
+> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Z7lEQEd6sszI0QkgA7mChCaklQdqHqUy?usp=sharing)
+
+**How it works:**
+
+```
+Google Colab GPU                     Your Local Machine
+┌─────────────────────────┐          ┌──────────────────────────┐
+│  Ollama (qwen3.5:9b)    │◄────────►│  AIRecon TUI             │
+│  cloudflared tunnel     │  HTTPS   │  ollama_url: tunnel URL  │
+└─────────────────────────┘          └──────────────────────────┘
+```
+
+**Steps:**
+
+1. Open the Colab link above and select **Runtime → Change runtime type → T4 GPU**
+2. Run all cells top to bottom (takes ~5–10 minutes first time)
+3. Copy the config snippet printed in **Cell 6** into `~/.airecon/config.yaml`:
+
+```yaml
+ollama_url: "https://xxxx.trycloudflare.com"   # printed by Cell 6
+ollama_model: "qwen3.5:9b"
+ollama_timeout: 300.0
+ollama_chunk_timeout: 300.0
+ollama_num_ctx: 32768
+ollama_num_ctx_small: 16384
+```
+
+4. Start AIRecon normally: `airecon start`
+
+**Colab GPU → model availability:**
+
+| Colab GPU | VRAM | Available model | Plan |
+|-----------|------|-----------------|------|
+| T4 | 15 GB | `qwen3.5:9b` | Free |
+| L4 | 22 GB | `qwen3.5:35b-a3b` (MoE) | Pro |
+| A100 | 40 GB | `qwen3.5:35b` | Pro+ |
+| H100 | 80 GB | `qwen3.5:122b` | Pro+ |
+
+**Limitations:**
+- Colab sessions last max **12 hours** (free) / **24 hours** (Pro) — tunnel URL changes on reconnect
+- T4 with `qwen3.5:9b` is the minimum viable setup — expect slower responses and more tool-call errors than a local 35B+ model
+- Not suitable for long autonomous sessions (deep recon can exceed session limits)
+- The Colab notebook is located at [`scripts/airecon_colab.ipynb`](scripts/airecon_colab.ipynb) if you want to self-host or modify it
+
+---
+
 ## Installation
 
 **Prerequisites:** Python 3.12+, Docker 20.10+, Ollama (running), git, curl
@@ -201,10 +252,16 @@ allow_destructive_testing: false
 | `command_timeout` | `900.0` | Max seconds per shell command in Docker. |
 | `vuln_similarity_threshold` | `0.7` | Jaccard dedup threshold for vulnerabilities. |
 
-**Remote Ollama:**
+**Remote Ollama** (LAN server or Google Colab tunnel):
 ```yaml
-"ollama_url": "http://192.168.1.100:11434" 
-"ollama_model": "qwen3:32b" 
+ollama_url: "http://192.168.1.100:11434"   # LAN server
+ollama_model: "qwen3.5:35b"
+
+# or via Colab tunnel (see "Running Ollama on Google Colab" section above):
+ollama_url: "https://xxxx.trycloudflare.com"
+ollama_model: "qwen3.5:9b"
+ollama_timeout: 300.0
+ollama_chunk_timeout: 300.0
 ```
 
 ---

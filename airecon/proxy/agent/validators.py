@@ -241,8 +241,11 @@ def _extract_scope_candidates_from_text(text: str) -> set[str]:
             return None
         if _looks_like_file_name(token) or _looks_like_token(token):
             return None
-        parsed = urlparse(token if "://" in token else f"http://{token}")
-        host = (parsed.hostname or "").strip().lower().rstrip(".")
+        try:
+            parsed = urlparse(token if "://" in token else f"http://{token}")
+            host = (parsed.hostname or "").strip().lower().rstrip(".")
+        except ValueError:
+            return None
         if not host:
             return None
         if _looks_like_file_name(host) or _looks_like_token(host):

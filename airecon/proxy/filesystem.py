@@ -27,6 +27,10 @@ _MAX_DEPTH = 3
 
 _MAX_CREATE_FILE_BYTES = 50 * 1024 * 1024
 
+# Files larger than this get a "use shell/script" advisory instead of truncated content.
+_LARGE_FILE_BYTE_THRESHOLD = 200 * 1024  # 200 KB
+_LARGE_FILE_LINE_THRESHOLD = 1000
+
 
 def _resolve_workspace_path(path: str, workspace_root: Path) -> Path:
     clean = str(path).strip().lstrip("/")
@@ -145,7 +149,85 @@ def read_file(path: str, offset: int = 0, limit: int = 500) -> dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def _count_lines_streaming(file_path: Path) -> int:
+    try:
+        with file_path.open("r", errors="ignore") as fh:
+            return sum(1 for _ in fh)
+    except Exception:
+        return -1
+
+
+def _read_sample_lines(file_path: Path, n: int = 10) -> list[str]:
+    sample: list[str] = []
+    try:
+        with file_path.open("r", errors="ignore") as fh:
+            for i, line in enumerate(fh):
+                if i >= n:
+                    break
+                sample.append(line.rstrip())
+    except Exception:
+        pass
+    return sample
+
+
+def _build_large_file_advisory(
+    file_path: Path, file_size: int, total_lines: int, sample: list[str]
+) -> dict[str, Any]:
+    size_str = _fmt_size(file_size)
+    lines_str = f"{total_lines:,}" if total_lines >= 0 else "unknown"
+    sample_text = "\n".join(sample) if sample else "(could not read sample)"
+    fname = file_path.name
+    stem = file_path.stem
+
+    advisory = (
+        f"[LARGE FILE — do NOT read directly, use shell one-liner or Python script]\n"
+        f"File  : {fname}\n"
+        f"Size  : {size_str}  |  Lines: {lines_str}\n"
+        f"\n"
+        f"Reading this file would give partial/truncated data. The full raw data is\n"
+        f"preserved on disk. Use the `execute` tool to filter and validate it:\n"
+        f"\n"
+        f"Sample (first 10 lines):\n"
+        f"---\n"
+        f"{sample_text}\n"
+        f"---\n"
+        f"\n"
+        f"Suggested shell one-liners (run with `execute`):\n"
+        f"  # Count total lines / unique entries\n"
+        f"  wc -l output/{fname} && sort -u output/{fname} | wc -l\n"
+        f"  # Extract unique domains\n"
+        f"  cut -d'/' -f3 output/{fname} | sort -u | head -50\n"
+        f"  # Filter URLs with parameters (potential injection points)\n"
+        f"  grep '?' output/{fname} | sort -u | head -100\n"
+        f"  # Extract unique paths (strip query strings)\n"
+        f"  cut -d'?' -f1 output/{fname} | sort -u | head -100\n"
+        f"  # Validate live URLs with httpx (writes only live results)\n"
+        f"  cat output/{fname} | httpx -silent -status-code -mc 200,301,302 -threads 50 -o output/live_{stem}.txt\n"
+        f"\n"
+        f"Or write a Python script with `create_file` → tools/filter_{stem}.py, then run\n"
+        f"it with `execute`. Let the script sort, deduplicate, and probe liveness —\n"
+        f"do not try to paginate through this file manually."
+    )
+
+    return {
+        "success": True,
+        "large_file": True,
+        "total_lines": total_lines,
+        "file_size_bytes": file_size,
+        "result": advisory,
+    }
+
+
 def _read_with_pagination(file_path: Path, offset: int, limit: int) -> dict[str, Any]:
+    # For large files, return an advisory instead of truncated content so the LLM
+    # is directed to use shell one-liners or Python scripts to process the raw data.
+    file_size = file_path.stat().st_size
+    if file_size > _LARGE_FILE_BYTE_THRESHOLD:
+        total_lines = _count_lines_streaming(file_path)
+        if total_lines < 0 or total_lines > _LARGE_FILE_LINE_THRESHOLD:
+            sample = _read_sample_lines(file_path, n=10)
+            return _build_large_file_advisory(file_path, file_size, total_lines, sample)
+
     try:
         raw = file_path.read_text(encoding="utf-8", errors="replace")
     except Exception as e:
@@ -260,20 +342,21 @@ def _walk_dir(
             output.append(f"{prefix}{connector}{entry.name}/ ({child_count} items)")
             _walk_dir(entry, workspace_root, output, depth + 1, child_prefix)
         else:
-            size = _fmt_size(entry.stat().st_size)
+            stat = entry.stat()
+            size = _fmt_size(stat.st_size)
             line_info = ""
-            if (
-                entry.suffix.lower() in _LINE_COUNT_EXTENSIONS
-                and entry.stat().st_size < 5_000_000
-            ):
+            large_tag = ""
+            if entry.suffix.lower() in _LINE_COUNT_EXTENSIONS:
                 try:
                     lc = sum(1 for _ in entry.open("r", errors="ignore"))
-                    line_info = f", {lc} lines"
+                    line_info = f", {lc:,} lines"
+                    if stat.st_size > _LARGE_FILE_BYTE_THRESHOLD and lc > _LARGE_FILE_LINE_THRESHOLD:
+                        large_tag = " [LARGE — use shell/script]"
                 except Exception as e:
                     logger.debug(
                         "Expected failure counting lines for %s: %s", entry.name, e
                     )
-            output.append(f"{prefix}{connector}{entry.name} ({size}{line_info})")
+            output.append(f"{prefix}{connector}{entry.name} ({size}{line_info}){large_tag}")
 
 
 def _fmt_size(size_bytes: int) -> str:
