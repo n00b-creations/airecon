@@ -349,11 +349,16 @@ class _ExplorationMixin:
         iterations while dataset_search has not been called in the last 10 tool
         results.  Silenced when:
         - No datasets installed at ~/.airecon/datasets/
-        - Phase is RECON or REPORT
+        - Phase is REPORT
         - dataset_search was already called recently
+
+        Covered phases and their installed categories:
+          RECON   → 'recon' (playbooks), 'network', 'api', 'web'
+          ANALYSIS → 'pentest', 'bug-bounty', 'web', 'api'
+          EXPLOIT  → 'pentest', 'vulnerability', 'bug-bounty'
         """
-        # Only useful in ANALYSIS and EXPLOIT
-        if phase not in (PipelinePhase.ANALYSIS, PipelinePhase.EXPLOIT):
+        # REPORT phase needs no knowledge-base lookup
+        if phase == PipelinePhase.REPORT:
             return ""
 
         # Check datasets actually installed
@@ -378,7 +383,7 @@ class _ExplorationMixin:
         if self._dataset_search_called_recently():
             return ""
 
-        # ── Build context-aware example queries ───────────────────────────
+        # ── Collect session context ───────────────────────────────────────
         session_techs: list[str] = []
         if self._session:  # type: ignore[attr-defined]
             techs = getattr(self._session, "technologies", {}) or {}
@@ -387,7 +392,30 @@ class _ExplorationMixin:
         tested_vulns = sorted(self._get_tested_vuln_classes())[:3]
         tech_str = session_techs[0] if session_techs else ""
 
-        if phase == PipelinePhase.ANALYSIS:
+        # ── Detect target type from session ──────────────────────────────
+        target: str = ""
+        if self._session:  # type: ignore[attr-defined]
+            target = str(getattr(self._session, "target", "") or "")
+        is_api_target = any(x in target.lower() for x in ("/api/", "/rest/", "/graphql", "/v1/", "/v2/", "/v3/"))
+
+        # ── Build phase-specific examples and guidance ────────────────────
+        if phase == PipelinePhase.RECON:
+            # airecon-recon-playbook.db (cat: recon), airecon-network-recon.db (cat: network),
+            # airecon-api-security.db (cat: api), airecon-web-vuln-patterns.db (cat: web)
+            if tech_str:
+                example = f'{{"query": "{tech_str} enumeration attack surface", "category": "recon", "limit": 3}}'
+            elif is_api_target:
+                example = '{"query": "API endpoint discovery authentication bypass", "category": "api", "limit": 3}'
+            else:
+                example = '{"query": "subdomain enumeration port scan fingerprint", "category": "network", "limit": 3}'
+            guidance = (
+                "REQUIRED: call dataset_search NOW to get recon methodology and tool sequences "
+                "from installed playbooks (categories: recon, network, api, web). "
+                "The knowledge base contains AIRecon-specific recon order, nmap sequences, "
+                "DNS enumeration, service fingerprinting, and API discovery playbooks."
+            )
+
+        elif phase == PipelinePhase.ANALYSIS:
             if tech_str and tested_vulns:
                 example = f'{{"query": "{tech_str} {tested_vulns[0]} exploit", "limit": 3}}'
             elif tech_str:
@@ -401,6 +429,7 @@ class _ExplorationMixin:
                 "REQUIRED: call dataset_search NOW to retrieve vulnerability techniques, "
                 "bypass methods, and payloads for detected technologies before continuing analysis."
             )
+
         else:  # EXPLOIT
             if tested_vulns:
                 vuln = tested_vulns[0].replace("_", " ")
@@ -423,7 +452,7 @@ class _ExplorationMixin:
             f"{guidance}\n"
             f"Example query: {example}\n"
             "Keep queries short (2-3 specific tokens) for best FTS5 recall. "
-            "Covers CVEs, exploit techniques, payloads, WAF bypasses, nuclei templates."
+            "Covers recon playbooks, CVEs, exploit techniques, payloads, WAF bypasses, nuclei templates."
         )
 
     # ── Web search RECON phase hint ────────────────────────────────────
