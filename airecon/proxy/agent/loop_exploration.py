@@ -1169,11 +1169,11 @@ class _ExplorationMixin:
 
             tech_summary = ", ".join(session_techs.keys()) if session_techs else ""
 
-            context = {"phase": str(phase).strip().upper()}
+            context: dict[str, str] = {"phase": str(phase).strip().upper()}
             for tech_name in session_techs:
                 _tech_key = str(tech_name).strip().lower()
                 if _tech_key:
-                    context[f"tech={_tech_key}"] = True
+                    context[f"tech={_tech_key}"] = "detected"
 
             engine.record_tool_result(
                 tool_name=tool_name,
