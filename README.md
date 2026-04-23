@@ -100,7 +100,7 @@ AIRecon requires a model with **extended thinking** (`<think>` blocks) and **rel
 If you don't have a GPU or your local VRAM is below the minimum, you can run Ollama on a **free Google Colab T4 GPU** and connect AIRecon to it via a public tunnel.
 
 > **Open the notebook:**
-> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1Z7lEQEd6sszI0QkgA7mChCaklQdqHqUy?usp=sharing)
+> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pikpikcu/airecon/blob/main/scripts/airecon_colab.ipynb)
 
 **How it works:**
 
